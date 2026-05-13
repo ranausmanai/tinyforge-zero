@@ -27,24 +27,7 @@ All numbers from `result.json` files in this repo's accompanying paper data. Sam
 
 ## The recipe in one diagram
 
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│  (1) PROBLEM GEN     Base model emits Python function + 3 asserts.   │
-│                      Keep only problems where the canonical passes.  │
-│                                                                      │
-│  (2) DIVERSE SOLVE   Resample 4–8 attempts at T=0.7–0.8.             │
-│                      Run each against the asserts.                   │
-│                                                                      │
-│  (3) PAIR MINING     If some pass and some fail → (broken, fixed)    │
-│                      pair. Skip if all-pass (too easy) or all-fail   │
-│                      (above competence).                             │
-│                                                                      │
-│  (4) LoRA TRAIN      Fine-tune (rank 16–32, q/k/v/o) on the pairs.   │
-│                      2 epochs, lr=1e-4. No human data, no RL.        │
-│                                                                      │
-│  (5) EVALUATE        HumanEval / HumanEval+ / MBPP / GSM8K.          │
-└──────────────────────────────────────────────────────────────────────┘
-```
+![The TinyForge-Zero recipe — 5 stages from problem generation to evaluation](docs/recipe_diagram.png)
 
 A control experiment — replacing the mined pairs with **identically-formatted but randomly-corrupted external pairs** — yields **exactly +0**. The signal is in the self-mined content, not the training-data format.
 
@@ -133,8 +116,7 @@ See the paper's §3 for measurements; the boundary chart above shows the recipe'
 
 The LoRA adapter weights for the headline 14B run (the 80.5% adapter) are ~200 MB and are not committed to this repo. They live separately:
 
-- **Hugging Face Hub**: `ranausmanai/tinyforge-zero-qwen25-14b-lora` *(upload pending — for now, request access via GitHub Issues)*
-- **Local mirror used in the paper**: `/Users/usman/tinyforgeexperiment/results/multi_pair/multi_v1/adapter/`
+- **Hugging Face Hub**: [`ranausmans/tinyforge-zero-qwen25-14b-lora`](https://huggingface.co/ranausmans/tinyforge-zero-qwen25-14b-lora) — 192 MB, Apache-2.0 (inherits from Qwen2.5-14B base)
 
 The adapter is a standard `peft` LoRA over `Qwen/Qwen2.5-14B`. Load with:
 
@@ -143,7 +125,7 @@ from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 base = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-14B", torch_dtype="bfloat16")
-model = PeftModel.from_pretrained(base, "ranausmanai/tinyforge-zero-qwen25-14b-lora")
+model = PeftModel.from_pretrained(base, "ranausmans/tinyforge-zero-qwen25-14b-lora")
 tok = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-14B")
 ```
 
