@@ -37,28 +37,58 @@ A control experiment — replacing the mined pairs with **identically-formatted 
 
 ```
 tinyforge-zero/
-├── recipe/
-│   ├── train_on_pairs.py       # Fast-path: train LoRA on a released pairs.jsonl
-│   ├── bootstrap.py            # Full-path: self-bootstrap pipeline (mining + train, 7B / 3B)
-│   ├── multi_pair_14b.py       # Full-path: aggressive multi-pair variant → 80.5% on 14B
-│   ├── curriculum_math.py      # Full-path: auto-difficulty curriculum for GSM8K
-│   ├── eval_raw.py             # HumanEval / MBPP / GSM8K eval (vLLM, raw-completion)
-│   ├── eval_plus.py            # HumanEval+ contamination-resistant eval
-│   └── confirm.py              # Confirmation re-eval against base
-├── data/
-│   ├── pairs_7b_40.jsonl              # 40 self-mined pairs (Qwen2.5-7B-Base run)
-│   ├── pairs_14b_multi_new60.jsonl    # 60 aggressive-mined pairs for 14B (+ warmup 40 → 100 total)
-│   └── pairs_math_13.jsonl            # 13 curriculum-mined math pairs (Qwen2.5-3B-Base → GSM8K 32→66)
+├── recipe/                                  # Training pipelines
+│   ├── train_on_pairs.py                    # Fast-path: train LoRA on a released pairs.jsonl
+│   ├── bootstrap.py                         # Self-bootstrap pipeline (mining + train, 7B / 3B)
+│   ├── bootstrap_14b_4bit_harvest.py        # 4-bit harvest variant (when full-precision OOMs)
+│   ├── multi_pair_14b.py                    # Aggressive multi-pair variant → 80.5% on 14B
+│   ├── curriculum_math.py                   # Auto-difficulty curriculum for GSM8K (§2.3, §3.8)
+│   ├── curriculum_code.py                   # Auto-difficulty curriculum for code
+│   └── math_bootstrap.py                    # Vanilla math bootstrap (regressed; see §3.8)
+├── evals/                                   # Evaluation harnesses
+│   ├── eval_raw.py                          # HumanEval / MBPP / GSM8K (vLLM, raw-completion)
+│   ├── eval_plus.py                         # HumanEval+ contamination-resistant eval
+│   └── confirm.py                           # Confirmation re-eval against base
+├── tts/                                     # Test-time sampling (§2.2, §3.3)
+│   ├── tts_scaling.py                       # Pass@N scaling sweep (HE, HE+, MATH-500)
+│   ├── tts_humaneval.py                     # Best-of-N pass@1 on HE/HE+
+│   ├── tts_math500.py                       # Best-of-N pass@1 on MATH-500
+│   ├── tts_aime.py                          # Pass@k curve on AIME (k=1..64)
+│   ├── tts_qwen14b_recipe.py                # TTS on top of the 14B multi-pair adapter
+│   └── tts_qwen3_8b_raw_control.py          # Control: TTS on raw Qwen3-8B (recipe vs sampling)
+├── experiments/                             # Every paper experiment, one script each
+│   ├── self_consistency.py                  # §3.4 — deployable TTS via majority vote (no oracle)
+│   ├── recipe_x_tts_synergy.py              # §3.5 — recipe × TTS synergy threshold (novel finding)
+│   ├── cross_domain_code_to_math.py         # §3.10 — code-trained recipe on math (+2, marginal)
+│   ├── mbpp_seeded_cross_arch.py            # §3.9 — Llama/Coder cross-architecture self-mining
+│   ├── diversity_cued_mining.py             # §3.10 — diversity-cued mining (low yield)
+│   ├── recursive_bootstrap.py               # §3.10 — recursive iter1→iter2→iter3 (plateau)
+│   ├── self_correction_code.py              # §3.10 — code self-correction recipe
+│   ├── self_correction_math_naive.py        # §3.10 — naive (wrong→fix only): catastrophic regress
+│   ├── self_correction_math_fixed.py        # §3.10 — fixed (mixed positives): recovered
+│   ├── math500_seeded_mining.py             # §3.10 — distribution-mismatch demo (catastrophic)
+│   ├── aime_scaling.py                      # AIME pass@k = 1..64 sweep
+│   ├── bcb_hard_eval.py                     # §3.10 — BigCodeBench-Hard distribution mismatch
+│   └── star_baseline_gsm8k.py               # Related-work baseline (STaR / rejection sampling FT)
 ├── controls/
-│   └── mbpp_corrupt_control.py # The +0 negative-control experiment
+│   └── mbpp_corrupt_control.py              # §3.6 — the +0 negative-control experiment
+├── data/                                    # Released mined pairs (drove paper numbers)
+│   ├── pairs_7b_40.jsonl                    # 40 pairs for Qwen2.5-7B-Base
+│   ├── pairs_14b_multi_new60.jsonl          # 60 aggressive-mined pairs for 14B (+ warmup 40 = 100)
+│   └── pairs_math_13.jsonl                  # 13 curriculum-mined math pairs (3B GSM8K)
 ├── docs/
-│   ├── scaling_chart.png       # Recipe lift vs base capability (paper Fig 1)
-│   ├── fig1_headline.png       # Headline result chart
-│   └── fig6_boundary.png       # Boundary conditions across 9 models
-├── REPRODUCE.md                # Paper figure/table → exact command mapping
+│   ├── recipe_diagram.png                   # The 5-stage recipe diagram (rendered above)
+│   ├── scaling_chart.png                    # Recipe lift vs base capability (paper Fig 1)
+│   ├── fig1_headline.png                    # Headline result chart
+│   └── fig6_boundary.png                    # Boundary conditions across 9 models
+├── scripts/
+│   └── make_recipe_diagram.py               # Source for the rendered recipe diagram
+├── REPRODUCE.md                             # Paper claim → exact command mapping (all sections)
 ├── requirements.txt
 └── LICENSE
 ```
+
+A note on these scripts: `recipe/`, `evals/`, and `controls/` are the clean replication paths — these have argparse CLIs and produce the headline numbers. The scripts under `experiments/` and `tts/` are the **original research scripts** used to produce each figure / table in the paper. They work, but they're closer to "research code" than "production tooling" — argument names vary, some have hard-coded paths to `/workspace/`, and they were each run on RunPod with a specific GPU. Read the top-of-file docstring of any experiment script for what it does and how to invoke it.
 
 ---
 
@@ -73,7 +103,7 @@ cd tinyforge-zero
 pip install -r requirements.txt
 
 # 3. Baseline the model (so you know the lift is real)
-python recipe/eval_raw.py \
+python evals/eval_raw.py \
     --model Qwen/Qwen2.5-7B \
     --bench humaneval
 
@@ -85,7 +115,7 @@ python recipe/train_on_pairs.py \
     --out adapter_7b --seed 13
 
 # 5. Evaluate the trained adapter
-python recipe/eval_raw.py \
+python evals/eval_raw.py \
     --model Qwen/Qwen2.5-7B \
     --adapter adapter_7b \
     --bench humaneval
