@@ -1,0 +1,13 @@
+# Exact stack used in the paper (May 2026).
+# Tested on H100 80GB (driver 570+) and RTX 6000 Ada.
+
+torch==2.6.0
+transformers==4.51.3
+vllm==0.8.5
+peft==0.13.0
+accelerate>=0.30
+datasets>=2.18
+sympy>=1.12
+numpy<2
+scipy
+hf_transfer

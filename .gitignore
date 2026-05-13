@@ -1,0 +1,23 @@
+# Adapters and large weights — distribute via HF Hub instead
+adapter_*/
+*.safetensors
+*.bin
+ckpt/
+ckpt_*/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Eval artifacts
+*.log
+eval_log.json
+iter_stats.jsonl
+*.npy
+
+# OS
+.DS_Store
+._*
